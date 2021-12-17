@@ -1,0 +1,35 @@
+model{
+
+  # Vraisemblance
+  for (i in 1:628){ 
+    alleviatControl[i]~dbern(pcControl[i])
+	logitpcControl[i] <- gama0 + beta*ageControl[i] + beta1*comControl[i] + beta3*control[i]
+	pcControl[i] <- exp(logitpcControl[i])/(1+exp(logitpcControl[i]))
+  }
+  
+  for (i in 1:499){ 
+    alleviatAzi[i]~dbern(pcAzi[i])
+	logitpcAzi[i] <- gama0 +theta+ beta*ageAzi[i] + beta1*comAzi[i] + beta3*azi[i]
+	pcAzi[i] <- exp(logitpcAzi[i])/(1+exp(logitpcAzi[i]))
+	
+  }
+
+
+  # A priori
+  beta3~dnorm(0,0.25)
+  beta1~dnorm(0,0.25)
+  beta~dnorm(0,0.25)
+  theta~dnorm(0,0.25)
+  gama0~dnorm(0,0.25)
+  
+  # variable
+  HR <- exp(theta)
+  pi0 <-exp(gama0)/(1 + exp(gama0))
+  pi1 <- (HR*pi0)/(HR*pi0 + 1 - pi0)
+  ABI <- pi1-pi0
+  SD <- sqrt(((pi1*(1-pi1)))+((pi0*(1-pi0))))
+  INTsup <- ABI+1.96*SD
+  INTinf <- ABI-1.96*SD
+  
+  
+}

@@ -1,0 +1,21 @@
+# Modèle
+model{
+
+  # Vraisemblance
+   for (i in 1:1609){ 
+    control[i]~dexp(lambda1)
+	
+  }
+  for (i in 1:1401){
+    azi[i]~dexp(lambda2)
+  }
+
+  # A priori
+  lambda1~dnorm(1,0.001) # propre mais très plat (faiblement informatif)
+  lambda2~dnorm(1,0.001) # propre mais très plat (faiblement informatif)
+
+  # Variables d'interet
+  sigma <- log(2)/lambda2-log(2)/lambda1
+  
+  
+}

@@ -1,0 +1,32 @@
+model{
+
+  # Vraisemblance
+  for (i in 1:nControl){ 
+    obsControl[i]~dbern(pcControl[i])
+	logitpcControl[i] <- gamma0 + beta1*ageControl[i] + beta2*commorbiControl[i]
+	pcControl[i] <- exp(logitpcControl[i])/(1+exp(logitpcControl[i]))
+  }
+  
+  for (i in 1:nAzi){ 
+    obsAzi[i]~dbern(pcAzi[i])
+	logitpcAzi[i] <- gamma0 +theta+ beta1*ageAzi[i] + beta2*commorbiAzi[i]
+	pcAzi[i] <- exp(logitpcAzi[i])/(1+exp(logitpcAzi[i]))
+	
+  }
+
+
+  # A priori
+  beta2~dnorm(0,0.25)#0.25
+  beta1~dnorm(0,0.25)#0.25
+  theta~dnorm(0,0.25)#0.25
+  gamma0~dnorm(0,0.25)#0.25
+  
+  # variable
+  HR <- exp(theta)
+  pi0 <-exp(gamma0)/(1 + exp(gamma0))
+  pi1 <- (HR*pi0)/(HR*pi0 + 1 - pi0)
+  ABI <- pi0-pi1
+  
+  
+  
+}

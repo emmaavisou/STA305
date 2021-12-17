@@ -1,0 +1,31 @@
+# Modèle
+model{
+
+  # Vraisemblance
+   for (i in 1:nObsControl){ 
+    obsControl[i]~dexp(lambda1[i])
+	lambda1[i] <- exp(gamma1[i]+beta1*ageControl[i]+beta2*commorbiControl[i])
+	gamma1[i] <- alpha1*indT12[i]+alpha2*indT22[i]+alpha3*indT32[i]+alpha4*indT42[i]
+	
+  }
+  for (i in 1:nObsAzi){
+    obsAzi[i]~dexp(lambda2[i])
+	lambda2[i] <- exp(gamma2[i]+theta+beta1*ageAzi[i]+beta2*commorbiAzi[i])
+	gamma2[i] <- alpha1*indT11[i]+alpha2*indT21[i]+alpha3*indT31[i]+alpha4*indT41[i]
+  }
+
+  # A priori
+  beta1~dnorm(0,11)#11
+  beta2~dnorm(0,11)#11
+  theta~dnorm(0,11)#11
+  alpha1~dnorm(-2.3,11)
+  alpha2~dnorm(0,11)
+  alpha3~dnorm(0,11)
+  alpha4~dnorm(0,11)
+
+  # Variables d'interet
+  HR <- exp(theta)
+  MDR <- (log(2)/exp(alpha1))*(1-1/exp(theta)) # page 81 suplementary
+    
+}
+

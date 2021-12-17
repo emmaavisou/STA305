@@ -1,0 +1,1334 @@
+---
+title: 'STA 305 : Introduction à l’analyse bayésienne et à ses méthodes numériques pour la biostatistique'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+\ 
+ 
+## PACKAGES
+\
+```{r}
+
+# install.packages("rjags")
+# install.packages("coda")
+# install.packages("HDInterval")
+# 
+# install.packages("bayesmeta")
+# install.packages("metafor")
+# install.packages("estmeansd")
+```
+\
+
+## LIBRARY
+\
+```{r}
+library(htmltools)
+library(metafor)
+library(bayesmeta)
+
+library(HDInterval)
+library(rjags)
+library(coda)
+library(estmeansd)
+
+setwd( "~/Desktop/STA305")
+getwd()
+
+
+```
+\ 
+
+## LE MODELE EXPONENTIEL PAR MORCEAU DANS LA POPULATION GENERALE 
+\
+
+#### Donnees du groupe Azithromycine
+\
+```{r}
+
+nAzi <- 500
+nObsAzi <- 402
+commorbiAzi <- rep(x = 0, nAzi)
+commorbiAzi[1:440] <- 1
+ageAzi <- rnorm(nAzi, 60.9, (7.9))
+obsAzi <- c(rep(x = 7, 265), rep(x = 14, 90), rep(x = 21, 26), rep(x = 28, 21))
+
+indT11 <- c(rep(x = 1, 265), rep(x = 1, 90), rep(x = 1, 26), rep(x = 1, 21))
+indT21 <- c(rep(x = 0, 265), rep(x = 1, 90), rep(x = 0, 26), rep(x = 0, 21))
+indT31 <- c(rep(x = 0, 265), rep(x = 0, 90), rep(x = 1, 26), rep(x = 0, 21))
+indT41 <- c(rep(x = 0, 265), rep(x = 0, 90), rep(x = 0, 26), rep(x = 1, 21))
+```
+\
+
+#### Donnees du groupe contole
+\
+```{r}
+
+nControl <- 823
+nObsControl <- 631
+commorbiControl <-  rep(x = 0, nControl)
+commorbiControl[1:724] <- 1
+ageControl <- rnorm(nControl, 60.5, (7.8))
+obsControl <- c(rep(x = 7, 400), rep(x = 14, 134), rep(x = 21, 66), rep(x = 28, 31))
+
+indT12 <- c(rep(x = 1, 400), rep(x = 1, 134), rep(x = 1, 66), rep(x = 1, 31))
+indT22 <- c(rep(x = 0, 400), rep(x = 1, 134), rep(x = 0, 66), rep(x = 0, 31))
+indT32 <- c(rep(x = 0, 400), rep(x = 0, 134), rep(x = 1, 66), rep(x = 0, 31))
+indT42 <- c(rep(x = 0, 400), rep(x = 0, 134), rep(x = 0, 66), rep(x = 1, 31))
+
+```
+\
+
+
+#### Definition du modele
+\
+```{r}
+
+pieceExpJags <- jags.model("aziPieceExp.txt", data = list("nObsControl"=nObsControl, "nObsAzi"=nObsAzi,
+                                                          "obsControl" = obsControl,"obsAzi" = obsAzi , 
+                                                          "ageAzi"=ageAzi, "ageControl"=ageControl,
+                                                                      "commorbiControl"=commorbiControl,"commorbiAzi"=commorbiAzi,
+                                                          "indT11"=indT11, "indT21"=indT21, "indT31"=indT31, "indT41"=indT41,
+                                                          "indT12"=indT12, "indT22"=indT22, "indT32"=indT32, "indT42"=indT42), n.chains = 3)
+
+
+
+resPieceExpHR <- coda.samples(pieceExpJags, variable.names = c("HR"), n.iter = 4000)
+summary(resPieceExpHR)
+
+resPieceExpMDR <- coda.samples(pieceExpJags, variable.names = c("MDR"), n.iter = 4000)
+summary(resPieceExpMDR)
+```
+\
+
+#### Retrait phase de chauffe
+\
+```{r}
+
+resPieceExpBurnHR <- window(resPieceExpHR, start = 1000)
+resPieceExpBurnMDR <- window(resPieceExpMDR, start = 1000)
+```
+\
+
+#### Intervalle de credibilite
+\
+```{r}
+
+HPDinterval(resPieceExpHR, prob = 0.95)
+HPDinterval(resPieceExpBurnMDR, prob = 0.95)
+```
+\
+
+#### Verification de la convergence et correlation des donnees
+\
+```{r}
+
+plot(resPieceExpBurnHR)
+
+gelman.plot(resPieceExpHR)
+
+autocorr.plot(resPieceExpBurnHR)
+
+acfplot(resPieceExpBurnHR)
+
+cumuplot(resPieceExpBurnHR) 
+
+crosscorr.plot(resPieceExpBurnHR)
+
+```
+\
+
+#### Probabilite de l'effet significatif et de la superiorite 
+\
+```{r}
+
+mean(resPieceExpBurnHR[[1]] > 1)
+mean(c(sapply(resPieceExpBurnMDR, "[", , 1)) > 1.5)
+
+```
+\
+
+### Analyse de sensibilite
+\
+```{r}
+
+pieceExpJagsSensi <- jags.model("aziPieceExpSensi.txt", data = list("nObsControl"=nObsControl, "nObsAzi"=nObsAzi,
+                                                          "obsControl" = obsControl,"obsAzi" = obsAzi , 
+                                                          "ageAzi"=ageAzi, "ageControl"=ageControl,
+                                                          "commorbiControl"=commorbiControl, "commorbiAzi"=commorbiAzi,
+                                                          "indT11"=indT11, "indT21"=indT21, "indT31"=indT31, "indT41"=indT41,
+                                                          "indT12"=indT12, "indT22"=indT22, "indT32"=indT32, "indT42"=indT42), n.chains = 3)
+
+
+
+resPieceExpSensi <- coda.samples(pieceExpJagsSensi, variable.names = c( "MDR", "HR"), n.iter = 4000)
+summary(resPieceExpSensi)
+
+resPieceExpBurn <- window(resPieceExpSensi, start = 1000)
+
+HPDinterval(resPieceExpSensi, prob = 0.95)
+
+plot(resPieceExpSensi)
+
+```
+
+
+\ 
+
+## LE MODELE EXPONENTIEL PAR MORCEAU DANS LA POPULATION COVID
+\
+
+#### Donnees du groupe Azithromycine
+\
+```{r}
+
+nAzi <- 186
+nObsAzi <- 136
+commorbiAzi <- rep(x = 0, nAzi)
+commorbiAzi[1:137] <- 1
+ageAzi <- rnorm(nAzi, 60.9, (7.9))
+obsAzi <- c(rep(x = 7, 82), rep(x = 14, 38), rep(x = 21, 9), rep(x = 28, 7))
+
+indT11 <- c(rep(x = 1, 265), rep(x = 1, 90), rep(x = 1, 26), rep(x = 1, 21))
+indT21 <- c(rep(x = 0, 265), rep(x = 1, 90), rep(x = 0, 26), rep(x = 0, 21))
+indT31 <- c(rep(x = 0, 265), rep(x = 0, 90), rep(x = 1, 26), rep(x = 0, 21))
+indT41 <- c(rep(x = 0, 265), rep(x = 0, 90), rep(x = 0, 26), rep(x = 1, 21))
+
+```
+\
+
+#### Donnees du groupe contole
+\
+```{r}
+
+nControl <- 236
+nObsControl <- 163
+commorbiControl <-  rep(x = 0, nControl)
+commorbiControl[1:208] <- 1
+ageControl <- rnorm(nControl, 60.5, (7.8))
+obsControl <- c(rep(x = 7, 77), rep(x = 14, 48), rep(x = 21, 26), rep(x = 28, 12))
+
+indT12 <- c(rep(x = 1, 400), rep(x = 1, 134), rep(x = 1, 66), rep(x = 1, 31))
+indT22 <- c(rep(x = 0, 400), rep(x = 1, 134), rep(x = 0, 66), rep(x = 0, 31))
+indT32 <- c(rep(x = 0, 400), rep(x = 0, 134), rep(x = 1, 66), rep(x = 0, 31))
+indT42 <- c(rep(x = 0, 400), rep(x = 0, 134), rep(x = 0, 66), rep(x = 1, 31))
+
+```
+\
+
+
+#### Definition du modele
+\
+```{r}
+
+pieceExpJags <- jags.model("aziPieceExp.txt", data = list("nObsControl"=nObsControl, "nObsAzi"=nObsAzi,
+                                                          "obsControl" = obsControl,"obsAzi" = obsAzi , 
+                                                          "ageAzi"=ageAzi, "ageControl"=ageControl,
+                                                          "commorbiControl"=commorbiControl, "commorbiAzi"=commorbiAzi,
+                                                          "indT11"=indT11, "indT21"=indT21, "indT31"=indT31, "indT41"=indT41,
+                                                          "indT12"=indT12, "indT22"=indT22, "indT32"=indT32, "indT42"=indT42), n.chains = 3)
+
+
+
+resPieceExpHR <- coda.samples(pieceExpJags, variable.names = c("HR"), n.iter = 4000)
+summary(resPieceExpHR)
+
+resPieceExpMDR <- coda.samples(pieceExpJags, variable.names = c("MDR"), n.iter = 4000)
+summary(resPieceExpMDR)
+
+```
+\
+
+#### Retrait phase de chauffe
+\
+```{r}
+
+resPieceExpBurnHR <- window(resPieceExpHR, start = 1000)
+resPieceExpBurnMDR <- window(resPieceExpMDR, start = 1000)
+```
+\
+
+#### Intervalle de credibilite
+\
+```{r}
+
+HPDinterval(resPieceExpBurnHR, prob = 0.95)
+HPDinterval(resPieceExpBurnMDR, prob = 0.95)
+```
+\
+
+#### Verification de la convergence et correlation des donnees
+\
+```{r}
+
+plot(resPieceExpBurnHR)
+
+gelman.plot(resPieceExpBurnHR)
+
+autocorr.plot(resPieceExpBurnHR)
+
+acfplot(resPieceExpBurnHR)
+
+cumuplot(resPieceExpBurnHR) 
+
+crosscorr.plot(resPieceExpBurnHR)
+
+```
+\
+
+#### Probabilite de l'effet significatif et de la superiorite 
+\
+```{r}
+
+mean(resPieceExpMDR[[1]] > 1)
+mean(c(sapply(resPieceExpHR, "[", , 1)) > 1)
+
+```
+\
+
+### Analyse de sensibilite
+\
+```{r}
+
+pieceExpJagsSensi <- jags.model("aziPieceExpSensi.txt", data = list("nObsControl"=nObsControl, "nObsAzi"=nObsAzi,
+                                                          "obsControl" = obsControl,"obsAzi" = obsAzi , 
+                                                          "ageAzi"=ageAzi, "ageControl"=ageControl,
+                                                          "commorbiControl"=commorbiControl, "commorbiAzi"=commorbiAzi,
+                                                          "indT11"=indT11, "indT21"=indT21, "indT31"=indT31, "indT41"=indT41,
+                                                          "indT12"=indT12, "indT22"=indT22, "indT32"=indT32, "indT42"=indT42), n.chains = 3)
+
+
+
+resPieceExpSensi <- coda.samples(pieceExpJagsSensi, variable.names = c( "MDR"), n.iter = 4000)
+summary(resPieceExpSensi)
+
+resPieceExpBurnSensi <- window(resPieceExpSensi, start = 1000)
+
+HPDinterval(resPieceExpBurnSensi, prob = 0.95)
+
+plot(resPieceExpBurnSensi)
+
+```
+
+
+
+
+
+
+
+
+## LE MODELE LOGISTIQUE DANS LA POPULATION GENERALE
+\
+
+#### Donnees du groupe Azithromycine
+\
+```{r}
+
+nAzi <- 500
+nObsAzi <- 16
+commorbiAzi <- rep(x = 0, nAzi)
+commorbiAzi[1:440] <- 1
+ageAzi <- rnorm(nAzi, 60.9, (7.9))
+obsAzi <- c(rep(x = 1, 16), rep(x = 0, 484))
+
+
+```
+\
+
+#### Donnees du groupe contole
+\
+```{r}
+
+nControl <- 823
+nObsControl <- 28
+commorbiControl <-  rep(x = 0, nControl)
+commorbiControl[1:724] <- 1
+ageControl <- rnorm(nControl, 60.5, (7.8))
+obsControl <- c(rep(x = 1, 28), rep(x = 0, 795))
+
+```
+\
+
+
+#### Definition du modele
+\
+```{r}
+
+logisticJags <- jags.model("logisticAzi.txt", data = list("nControl"=nControl, "nAzi"=nAzi,
+                                                     "obsControl" = obsControl,"obsAzi" = obsAzi , 
+                                                     "ageAzi"=ageAzi, "ageControl"=ageControl,
+                                                     "commorbiControl"=commorbiControl, "commorbiAzi"=commorbiAzi), n.chains = 3)
+
+
+
+resLogisticHR <- coda.samples(logisticJags, variable.names = c("HR"), n.iter = 4000)
+summary(resLogisticHR)
+
+resLogisticABI <- coda.samples(logisticJags, variable.names = c("ABI"), n.iter = 4000)
+summary(resLogisticABI)
+
+```
+\
+
+#### Retrait phase de chauffe
+\
+```{r}
+
+resLogisticBurnHR <- window(resLogisticHR, start = 1000)
+resLogisticBurnABI <- window(resLogisticABI, start = 1000)
+```
+\
+
+#### Intervalle de credibilite
+\
+```{r}
+
+HPDinterval(resLogisticBurnHR, prob = 0.95)
+HPDinterval(resLogisticBurnABI, prob = 0.95)
+```
+\
+
+#### Verification de la convergence et correlation des donnees
+\
+```{r}
+
+plot(resLogisticABI)
+
+gelman.plot(resLogisticABI)
+
+autocorr.plot(resLogisticBurnABI)
+
+acfplot(resLogisticBurnABI)
+
+cumuplot(resLogisticBurnABI) 
+
+crosscorr.plot(resLogisticBurnHR)
+
+```
+\
+
+#### Probabilite de l'effet significatif et de la superiorite 
+\
+```{r}
+mean(c(sapply(resLogisticHR, "[", , 1)) < 1)
+mean(resLogisticABI[[1]] < 1)-mean(resLogisticABI[[1]] < 0.02)
+```
+\
+
+### Analyse de sensibilite
+\
+```{r}
+
+logisticJagsSensi <- jags.model("logisticAziSensi.txt", data = list("nControl"=nControl, "nAzi"=nAzi,
+                                                          "obsControl" = obsControl,"obsAzi" = obsAzi , 
+                                                          "ageAzi"=ageAzi, "ageControl"=ageControl,
+                                                          "commorbiControl"=commorbiControl, "commorbiAzi"=commorbiAzi), n.chains = 3)
+
+
+
+resLogisticSensi <- coda.samples(logisticJagsSensi, variable.names = c( "HR", "ABI"), n.iter = 4000)
+summary(resLogisticSensi)
+
+resLogisticBurnSensi <- window(resLogisticSensi, start = 1000)
+
+HPDinterval(resLogisticBurnSensi, prob = 0.95)
+
+plot(resLogisticBurnSensi)
+
+```
+
+
+
+
+
+
+
+
+## LE MODELE LOGISTIQUE DANS LA POPULATION GENERALE
+\
+
+#### Donnees du groupe Azithromycine
+\
+```{r}
+
+nAzi <- 186
+nObsAzi <- 11
+commorbiAzi <- rep(x = 0, nAzi)
+commorbiAzi[1:164] <- 1
+ageAzi <- rnorm(nAzi, 60.9, (7.9))
+obsAzi <- c(rep(x = 1, 11), rep(x = 0, 175))
+
+
+```
+\
+
+#### Donnees du groupe contole
+\
+```{r}
+
+nControl <- 236
+nObsControl <- 17
+commorbiControl <-  rep(x = 0, nControl)
+commorbiControl[1:208] <- 1
+ageControl <- rnorm(nControl, 60.5, (7.8))
+obsControl <- c(rep(x = 1, 17), rep(x = 0, 219))
+
+```
+\
+
+
+#### Definition du modele
+\
+```{r}
+
+logisticJags <- jags.model("logisticAzi.txt", data = list("nControl"=nControl, "nAzi"=nAzi,
+                                                     "obsControl" = obsControl,"obsAzi" = obsAzi , 
+                                                     "ageAzi"=ageAzi, "ageControl"=ageControl,
+                                                     "commorbiControl"=commorbiControl, "commorbiAzi"=commorbiAzi), n.chains = 3)
+
+
+
+resLogisticHR <- coda.samples(logisticJags, variable.names = c("HR"), n.iter = 4000)
+summary(resLogisticHR)
+
+resLogisticABI <- coda.samples(logisticJags, variable.names = c("ABI"), n.iter = 4000)
+summary(resLogisticABI)
+
+```
+\
+
+#### Retrait phase de chauffe
+\
+```{r}
+
+resLogisticBurnHR <- window(resLogisticHR, start = 1000)
+resLogisticBurnABI <- window(resLogisticABI, start = 1000)
+```
+\
+
+#### Intervalle de credibilite
+\
+```{r}
+
+HPDinterval(resLogisticBurnHR, prob = 0.95)
+HPDinterval(resLogisticBurnABI, prob = 0.95)
+```
+\
+
+#### Verification de la convergence et correlation des donnees
+\
+```{r}
+
+plot(resLogisticBurnHR)
+
+gelman.plot(resLogisticBurnHR)
+
+autocorr.plot(resLogisticBurnHR)
+
+acfplot(resLogisticBurnHR)
+
+cumuplot(resLogisticBurnHR) 
+
+crosscorr.plot(resLogisticBurnHR)
+
+```
+\
+
+#### Probabilite de l'effet significatif et de la superiorite 
+\
+```{r}
+mean(c(sapply(resLogisticHR, "[", , 1)) < 1)
+mean(c(sapply(resLogisticBurnABI, "[", , 1)) > 0.02)
+
+```
+\
+
+### Analyse de sensibilite
+\
+```{r}
+
+logisticJagsSensi <- jags.model("logisticAziSensi.txt", data = list("nControl"=nControl, "nAzi"=nAzi,
+                                                          "obsControl" = obsControl,"obsAzi" = obsAzi , 
+                                                          "ageAzi"=ageAzi, "ageControl"=ageControl,
+                                                          "commorbiControl"=commorbiControl, "commorbiAzi"=commorbiAzi), n.chains = 3)
+
+
+
+resLogisticSensi <- coda.samples(logisticJagsSensi, variable.names = c( "HR", "ABI"), n.iter = 4000)
+summary(resLogisticSensi)
+
+resLogisticBurnSensi <- window(resLogisticSensi, start = 1000)
+
+HPDinterval(resLogisticBurnSensi, prob = 0.95)
+
+plot(resLogisticBurnSensi)
+
+```
+\
+\
+\
+
+## ANALYSE EN SOUS GROUPE
+\
+
+### Alleviation of all symptoms 
+\
+
+#### Donnees du groupe Azithromycine
+\
+```{r}
+
+nAzi <- 420
+commorbiAzi <- rep(x = 0, nAzi)
+commorbiAzi[1:370] <- 1
+ageAzi <- rnorm(nAzi, 60.9, (7.9))
+varAzi <- rep(x = 0, nAzi)
+varAzi[1:401] <- 1
+obsAzi <- bc.mean.sd(q1.val=1, med.val=3, q3.val=7,n=nAzi)
+obsAzi <-  obsAzi[[6]]
+diAzi <- bc.mean.sd(q1.val=4, med.val=6, q3.val=9,n=nAzi)
+durationIllnessAzi <-  diAzi[[6]]
+
+
+```
+\
+
+#### Donnees du groupe contole
+\
+```{r}
+
+nControl <- 505
+commorbiControl <-  rep(x = 0, nControl)
+commorbiControl[1:444] <- 1
+ageControl <- rnorm(nControl, 60.5, (7.8))
+varControl <-  rep(x = 0, nControl)
+varControl[1:473] <- 1
+obsControl <- bc.mean.sd(q1.val=1, med.val=3, q3.val=7,n=nControl)
+obsControl <-  obsControl[[6]]
+diControl <- bc.mean.sd(q1.val=4, med.val=6, q3.val=10,n=nControl)
+durationIllnessControl <- diControl[[6]]
+
+```
+\
+
+
+#### Definition du modele
+\
+```{r}
+
+allAlleJags <- jags.model("sousGroupeExp.txt", data = list("obsControl" = obsControl, "obsAzi" = obsAzi , 
+                                                "ageAzi"=ageAzi, "ageControl"=ageControl,
+                                                "commorbiControl"=commorbiControl, "commorbiAzi"=commorbiAzi,
+                                                "varAzi"=varAzi,"varControl"=varControl,
+                                                "durationIllnessControl"=durationIllnessControl, "durationIllnessAzi"=durationIllnessAzi,
+                                                "nControl"=nControl, "nAzi"=nAzi), n.chains = 3)
+
+
+resAllAlle <- coda.samples(allAlleJags, variable.names = c("HR"), n.iter = 4000)
+summary(resAllAlle)
+
+```
+\
+
+#### Retrait phase de chauffe
+\
+```{r}
+
+resAllAlleBurn <- window(resAllAlle, start = 1000)
+```
+\
+
+#### Intervalle de credibilite
+\
+```{r}
+
+HPDinterval(resAllAlleBurn, prob = 0.95)
+```
+\
+
+#### Verification de la convergence et correlation des donnees
+\
+```{r}
+
+plot(resAllAlleBurn)
+
+gelman.plot(resLogisticBurnHR)
+
+```
+\
+
+### Sustained alleviation of all symptoms
+\
+
+
+#### Donnees du groupe Azithromycine
+\
+```{r}
+
+nAzi <- 422
+commorbiAzi <- rep(x = 0, nAzi)
+commorbiAzi[1:372] <- 1
+ageAzi <- rnorm(nAzi, 60.9, (7.9))
+varAzi <- rep(x = 0, nAzi)
+varAzi[1:338] <- 1
+obsAzi <-  bc.mean.sd(q1.val=3, med.val=8, q3.val=27,n=nAzi)
+obsAzi <-  obsAzi[[6]]
+diAzi <- bc.mean.sd(q1.val=4, med.val=6, q3.val=9,n=nAzi)
+durationIllnessAzi <-  diAzi[[6]]
+
+
+```
+\
+
+#### Donnees du groupe contole
+\
+```{r}
+
+nControl <- 510
+commorbiControl <-  rep(x = 0, nControl)
+commorbiControl[1:449] <- 1
+ageControl <- rnorm(nControl, 60.5, (7.8))
+varControl <-  rep(x = 0, nControl)
+varControl[1:425] <- 1
+obsControl <- bc.mean.sd(q1.val=3, med.val=10, q3.val=24,n=nControl)
+obsControl <-  obsControl[[6]]
+diControl <- bc.mean.sd(q1.val=4, med.val=6, q3.val=10,n=nControl)
+durationIllnessControl <- diControl[[6]]
+
+
+```
+\
+
+
+#### Definition du modele
+\
+```{r}
+
+sustAlleJags <- jags.model("sousGroupeExp.txt", data = list("obsControl" = obsControl, "obsAzi" = obsAzi , 
+                                                  "ageAzi"=ageAzi, "ageControl"=ageControl,
+                                                  "commorbiControl"=commorbiControl, "commorbiAzi"=commorbiAzi,
+                                                  "varAzi"=varAzi,"varControl"=varControl,
+                                                  "durationIllnessControl"=durationIllnessControl, "durationIllnessAzi"=durationIllnessAzi,
+                                                  "nControl"=nControl, "nAzi"=nAzi), n.chains = 3)
+
+
+resSustAlle <- coda.samples(sustAlleJags, variable.names = c("HR"), n.iter = 4000)
+summary(resSustAlle)
+
+```
+\
+
+#### Retrait phase de chauffe
+\
+```{r}
+
+resSustAlleBurn <- window(resSustAlle, start = 1000)
+```
+\
+
+#### Intervalle de credibilite
+\
+```{r}
+
+HPDinterval(resSustAlleBurn, prob = 0.95)
+```
+\
+
+#### Verification de la convergence et correlation des donnees
+\
+```{r}
+
+plot(resSustAlleBurn)
+
+gelman.plot(resSustAlleBurn)
+
+```
+\
+
+### Initial reduction of severity of symptoms
+
+
+#### Donnees du groupe Azithromycine
+\
+```{r}
+
+nAzi <- 494
+commorbiAzi <- rep(x = 0, nAzi)
+commorbiAzi[1:435] <- 1
+ageAzi <- rnorm(nAzi, 60.9, (7.9))
+varAzi <- rep(x = 0, nAzi)
+varAzi[1:449] <- 1
+obsAzi <-  bc.mean.sd(q1.val=3, med.val=8, q3.val=27,n=nAzi)
+obsAzi <-  obsAzi[[6]]
+diAzi <- bc.mean.sd(q1.val=4, med.val=6, q3.val=9,n=nAzi)
+durationIllnessAzi <-  diAzi[[6]]
+
+
+```
+\
+
+#### Donnees du groupe contole
+\
+```{r}
+
+nControl <- 622
+commorbiControl <-  rep(x = 0, nControl)
+commorbiControl[1:547] <- 1
+ageControl <- rnorm(nControl, 60.5, (7.8))
+varControl <-  rep(x = 0, nControl)
+varControl[1:554] <- 1
+obsControl <- bc.mean.sd(q1.val=3, med.val=10, q3.val=24,n=nControl)
+obsControl <-  obsControl[[6]]
+diControl <- bc.mean.sd(q1.val=4, med.val=6, q3.val=10,n=nControl)
+durationIllnessControl <- diControl[[6]]
+
+
+```
+\
+
+
+#### Definition du modele
+\
+```{r}
+
+sevJags <- jags.model("sousGroupeExp.txt", data = list("obsControl" = obsControl, "obsAzi" = obsAzi , 
+                                                  "ageAzi"=ageAzi, "ageControl"=ageControl,
+                                                  "commorbiControl"=commorbiControl, "commorbiAzi"=commorbiAzi,
+                                                  "varAzi"=varAzi,"varControl"=varControl,
+                                                  "durationIllnessControl"=durationIllnessControl, "durationIllnessAzi"=durationIllnessAzi,
+                                                  "nControl"=nControl, "nAzi"=nAzi), n.chains = 3) 
+
+
+resSev <- coda.samples(sevJags, variable.names = c("HR"), n.iter = 4000)
+summary(resSev)
+
+
+```
+\
+
+#### Retrait phase de chauffe
+\
+```{r}
+
+resSevBurn <- window(resSev, start = 1000)
+```
+\
+
+#### Intervalle de credibilite
+\
+```{r}
+
+HPDinterval(resSevBurn, prob = 0.95)
+```
+\
+
+#### Verification de la convergence et correlation des donnees
+\
+```{r}
+
+plot(resSevBurn)
+
+gelman.plot(resSevBurn)
+
+```
+\
+
+### Self-reported contact with one or more health-care services
+
+
+#### Donnees du groupe Azithromycine
+\
+```{r}
+
+nAzi <- 499
+commorbiAzi <- rep(x = 0, nAzi)
+commorbiAzi[1:439] <- 1
+ageAzi <- rnorm(nAzi, 60.9, (7.9))
+varAzi <- rep(x = 0, nAzi)
+varAzi[1:255] <- 1
+diAzi <- bc.mean.sd(q1.val=4, med.val=6, q3.val=9,n=nAzi)
+durationIllnessAzi <-  diAzi[[6]]
+
+
+```
+\
+
+#### Donnees du groupe contole
+\
+```{r}
+
+nControl <- 628
+commorbiControl <-  rep(x = 0, nControl)
+commorbiControl[1:553] <- 1
+ageControl <- rnorm(nControl, 60.5, (7.8))
+varControl <-  rep(x = 0, nControl)
+varControl[1:323] <- 1
+diControl <- bc.mean.sd(q1.val=4, med.val=6, q3.val=10,n=nControl)
+durationIllnessControl <- diControl[[6]]
+
+
+
+```
+\
+
+
+#### Definition du modele
+\
+```{r}
+
+contactJags <- jags.model("sousGroupeLogit.txt", data = list("varControl" = varControl, "varAzi" = varAzi , 
+                                               "ageAzi"=ageAzi, "ageControl"=ageControl,
+                                               "commorbiControl"=commorbiControl, "commorbiAzi"=commorbiAzi,
+                                               "durationIllnessAzi"=durationIllnessAzi,"durationIllnessControl"=durationIllnessControl,
+                                               "nControl"=nControl, "nAzi"=nAzi),
+                                                n.chains = 3)
+
+
+
+resCOntact <- coda.samples(contactJags, variable.names = c("HR"), n.iter = 4000)
+summary(resCOntact)
+
+
+
+```
+\
+
+#### Retrait phase de chauffe
+\
+```{r}
+
+resCOntactBurn <- window(resCOntact, start = 1000)
+```
+\
+
+#### Intervalle de credibilite
+\
+```{r}
+
+HPDinterval(resCOntactBurn, prob = 0.95)
+```
+\
+
+#### Verification de la convergence et correlation des donnees
+\
+```{r}
+
+plot(resCOntactBurn)
+
+gelman.plot(resCOntactBurn)
+
+```
+\
+
+### General practitioner reported contact with one or more health-care services
+
+
+#### Donnees du groupe Azithromycine
+\
+```{r}
+
+nAzi <- 287
+commorbiAzi <- rep(x = 0, nAzi)
+commorbiAzi[1:253] <- 1
+ageAzi <- rnorm(nAzi, 60.9, (7.9))
+varAzi <- rep(x = 0, nAzi)
+varAzi[1:173] <- 1
+diAzi <- bc.mean.sd(q1.val=4, med.val=6, q3.val=9,n=nAzi)
+durationIllnessAzi <-  diAzi[[6]]
+
+
+```
+\
+
+#### Donnees du groupe contole
+\
+```{r}
+
+nControl <- 387
+commorbiControl <-  rep(x = 0, nControl)
+commorbiControl[1:341] <- 1
+ageControl <- rnorm(nControl, 60.5, (7.8))
+varControl <-  rep(x = 0, nControl)
+varControl[1:200] <- 1
+diControl <- bc.mean.sd(q1.val=4, med.val=6, q3.val=10,n=nControl)
+durationIllnessControl <- diControl[[6]]
+
+
+```
+\
+
+
+#### Definition du modele
+\
+```{r}
+
+practiJags <- jags.model("sousGroupeLogit.txt", data = list("varControl" = varControl, "varAzi" = varAzi , 
+                                                         "ageAzi"=ageAzi, "ageControl"=ageControl,
+                                                         "commorbiControl"=commorbiControl, "commorbiAzi"=commorbiAzi,
+                                                         "durationIllnessAzi"=durationIllnessAzi,"durationIllnessControl"=durationIllnessControl, 
+                                                         "nControl"=nControl, "nAzi"=nAzi),
+                                                          n.chains = 3)
+
+
+
+resPracti <- coda.samples(practiJags, variable.names = c("HR"), n.iter = 4000)
+summary(resPracti)
+
+
+
+```
+\
+
+#### Retrait phase de chauffe
+\
+```{r}
+
+resPractiBurn <- window(resPracti, start = 1000)
+```
+\
+
+#### Intervalle de credibilite
+\
+```{r}
+
+HPDinterval(resPractiBurn, prob = 0.95)
+```
+\
+
+#### Verification de la convergence et correlation des donnees
+\
+```{r}
+
+plot(resPractiBurn)
+
+gelman.plot(resPractiBurn)
+
+```
+\
+
+### Prescription of antibiotics
+
+
+#### Donnees du groupe Azithromycine
+\
+```{r}
+
+nAzi <- 271
+azi <- 20
+
+```
+\
+
+#### Donnees du groupe contole
+\
+```{r}
+
+nControl <- 353
+control <- 26
+
+```
+\
+
+
+#### Definition du modele
+\
+```{r}
+
+presJags <- jags.model("sousGroupeBinom.txt", data = list("control" = control, "azi" = azi, 
+                                               "nControl"=nControl,"nAzi"=nAzi), n.chains = 3)
+
+resPres <- coda.samples(presJags, variable.names = c("RR"), n.iter = 4000)
+summary(resPres)
+
+
+```
+\
+
+#### Retrait phase de chauffe
+\
+```{r}
+
+resPresBurn <- window(resPres, start = 1000)
+```
+\
+
+#### Intervalle de credibilite
+\
+```{r}
+
+HPDinterval(resPresBurn, prob = 0.95)
+```
+\
+
+#### Verification de la convergence et correlation des donnees
+\
+```{r}
+
+plot(resPresBurn)
+
+gelman.plot(resPresBurn)
+
+```
+\
+
+### Hospital assessment without admission
+
+
+
+#### Donnees du groupe Azithromycine
+\
+```{r}
+
+nAzi <- 500
+azi <- 9
+
+```
+\
+
+#### Donnees du groupe contole
+\
+```{r}
+
+nControl <- 629
+control <- 11
+
+```
+\
+
+
+#### Definition du modele
+\
+```{r}
+
+hospJags <- jags.model("sousGroupeBinom.txt", data = list("control" = control, "azi" = azi, 
+                                               "nControl"=nControl,"nAzi"=nAzi), n.chains = 3)
+
+resHosp <- coda.samples(hospJags, variable.names = c("RR"), n.iter = 4000)
+summary(resHosp)
+
+
+```
+\
+
+#### Retrait phase de chauffe
+\
+```{r}
+
+resHospBurn <- window(resHosp, start = 1000)
+```
+\
+
+#### Intervalle de credibilite
+\
+```{r}
+
+HPDinterval(resHospBurn, prob = 0.95)
+```
+\
+
+#### Verification de la convergence et correlation des donnees
+\
+```{r}
+
+plot(resHospBurn)
+
+gelman.plot(resHospBurn)
+
+```
+\
+
+### Oxygen administration
+
+
+#### Donnees du groupe Azithromycine
+\
+```{r}
+
+nAzi <- 497
+azi <- 10
+
+```
+\
+
+#### Donnees du groupe contole
+\
+```{r}
+
+nControl <- 625
+control <- 15
+
+```
+\
+
+
+#### Definition du modele
+\
+```{r}
+
+oxyJags <- jags.model("sousGroupeBinom.txt", data = list("control" = control, "azi" = azi, 
+                                                         "nControl"=nControl,"nAzi"=nAzi), n.chains = 3)
+
+resOxy <- coda.samples(oxyJags, variable.names = c("RR"), n.iter = 4000)
+summary(resOxy)
+
+
+```
+\
+
+#### Retrait phase de chauffe
+\
+```{r}
+
+resOxyBurn <- window(resOxy, start = 1000)
+```
+\
+
+#### Intervalle de credibilite
+\
+```{r}
+
+HPDinterval(resOxyBurn, prob = 0.95)
+```
+\
+
+#### Verification de la convergence et correlation des donnees
+\
+```{r}
+
+plot(resOxyBurn)
+
+gelman.plot(resOxyBurn)
+
+```
+\
+
+### Mechanical ventilation
+
+
+#### Donnees du groupe Azithromycine
+\
+```{r}
+
+nAzi <- 496
+azi <- 2
+
+```
+\
+
+#### Donnees du groupe contole
+\
+```{r}
+
+nControl <- 625
+control <- 5
+
+```
+\
+
+
+#### Definition du modele
+\
+```{r}
+
+ventJags <- jags.model("sousGroupeBinom.txt", data = list("control" = control, "azi" = azi, 
+                                                          "nControl"=nControl,"nAzi"=nAzi), n.chains = 3)
+
+resVent <- coda.samples(ventJags, variable.names = c("RR"), n.iter = 4000)
+summary(resVent)
+
+```
+\
+
+#### Retrait phase de chauffe
+\
+```{r}
+
+resVentBurn <- window(resVent, start = 1000)
+```
+\
+
+#### Intervalle de credibilite
+\
+```{r}
+
+HPDinterval(resVentBurn, prob = 0.95)
+```
+\
+
+#### Verification de la convergence et correlation des donnees
+\
+```{r}
+
+plot(resVentBurn)
+
+gelman.plot(resVentBurn)
+
+```
+\
+
+### Intensive care unit admission
+
+
+#### Donnees du groupe Azithromycine
+\
+```{r}
+
+nAzi <- 495
+azi <- 3
+
+```
+\
+
+#### Donnees du groupe contole
+\
+```{r}
+
+nControl <- 625
+control <- 5
+
+```
+\
+
+
+#### Definition du modele
+\
+```{r}
+
+uciJags <- jags.model("sousGroupeBinom.txt", data = list("control" = control, "azi" = azi, 
+                                                         "nControl"=nControl,"nAzi"=nAzi), n.chains = 3)
+
+resUci <- coda.samples(uciJags, variable.names = c("RR"), n.iter = 4000)
+summary(resUci)
+
+```
+\
+
+#### Retrait phase de chauffe
+\
+```{r}
+
+resUciBurn <- window(resUci, start = 1000)
+```
+\
+
+#### Intervalle de credibilite
+\
+```{r}
+
+HPDinterval(resUciBurn, prob = 0.95)
+```
+\
+
+#### Verification de la convergence et correlation des donnees
+\
+```{r}
+
+plot(resUciBurn)
+
+gelman.plot(resUciBurn)
+
+```
+\
+

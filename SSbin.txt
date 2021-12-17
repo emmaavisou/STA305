@@ -1,0 +1,13 @@
+model{
+
+   # Vraisemblance
+   control~dbin(pc, ncontrol)
+   azi~dbin(RR*pc, nazi)
+
+   # A priori
+   logRR~dnorm(0,0.001)
+   pc~dunif(0,1) #probabilité de décès dans le groupe contrôle
+
+   #Re-parametrisation
+   RR <- exp(logRR)
+ }

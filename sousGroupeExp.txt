@@ -1,0 +1,30 @@
+# Modèle
+model{
+
+  # Vraisemblance
+   for (i in 1:nControl){ 
+    obsControl[i]~dexp(lambda1[i])
+	lambda1[i] <- exp(beta1*ageControl[i]+beta2*commorbiControl[i]+beta3*varControl[i]+beta4*durationIllnessAzi[i])
+	
+	
+  }
+  for (i in 1:nAzi){
+    obsAzi[i]~dexp(lambda2[i])
+	lambda2[i] <- exp(theta+beta1*ageAzi[i]+beta2*commorbiAzi[i]+beta3*varAzi[i]+beta4*durationIllnessControl[i])
+	
+  }
+
+  # A priori
+  beta4~dnorm(0,0.001)
+  beta3~dnorm(0,0.001)
+  beta2~dnorm(0,0.001)
+  beta1~dnorm(0,0.001)
+  theta~dnorm(0,0.001)
+  
+
+  # Variables d'interet
+  HR <- exp(theta)
+  MDR <- 1/exp(theta) # page 81 suplementary
+  
+  
+}
